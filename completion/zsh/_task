@@ -116,6 +116,8 @@ _task() {
         '(--sort)--sort[set task sorting order]:order:(default alphanumeric none)'
         '(--status)--status[exit non-zero if supplied tasks not up-to-date]'
         '(--summary)--summary[show summary\: field from tasks instead of running them]'
+        '(--receipt)--receipt[write machine-readable execution receipt (JSON) instead of running tasks]:receipt file:_files'
+        '(--compare-receipts)--compare-receipts[offline\: compare two execution receipt files]:receipt file:_files'
         '(-t --taskfile)'{-t,--taskfile}'[specify a different taskfile]:taskfile:_files'
         '(-v --verbose)'{-v,--verbose}'[verbose mode]'
         '(-w --watch)'{-w,--watch}'[watch-mode for given tasks, re-run when inputs change]'

@@ -145,6 +145,8 @@ export extern "task" [
   --status                                        # exit with a non-zero code if tasks are not up-to-date
   --dry(-n)                                       # compile and print the tasks without executing them
   --summary                                       # show the summary of a task instead of running it
+  --receipt: path                                 # write the execution receipt (JSON) to a file instead of running tasks
+  --compare-receipts: path                        # offline: compare two execution receipt files
   --watch(-w)                                     # watch the given tasks and re-run them on changes
   --interval(-I): string                          # interval to watch for changes, e.g. 500ms
   --parallel(-p)                                  # run the tasks given on the command line in parallel

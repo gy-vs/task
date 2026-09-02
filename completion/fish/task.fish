@@ -96,6 +96,8 @@ complete -c $GO_TASK_PROGNAME -s s -l silent                    -d 'disable echo
 complete -c $GO_TASK_PROGNAME      -l sort                      -d 'set task sorting order' -xa "default alphanumeric none"
 complete -c $GO_TASK_PROGNAME      -l status                    -d 'exit non-zero if tasks not up-to-date'
 complete -c $GO_TASK_PROGNAME      -l summary                   -d 'show task summary'
+complete -c $GO_TASK_PROGNAME      -l receipt                   -d 'write execution receipt (JSON) to file instead of running tasks' -r
+complete -c $GO_TASK_PROGNAME      -l compare-receipts          -d 'offline: compare two execution receipt files' -r
 complete -c $GO_TASK_PROGNAME -s t -l taskfile                  -d 'choose Taskfile to run'
 complete -c $GO_TASK_PROGNAME -s v -l verbose                   -d 'verbose output'
 complete -c $GO_TASK_PROGNAME      -l version                   -d 'show version'

@@ -19,6 +19,26 @@ import (
 	"github.com/go-task/task/v3/taskfile/ast"
 )
 
+// Variable source layers reported by getVariables. These identify where the
+// effective value of a variable came from, in precedence order (later layers
+// win).
+const (
+	varSourceEnvironment          = "environment"
+	varSourceSpecial              = "special"
+	varSourceTaskfileEnv          = "taskfile-env"
+	varSourceTaskfileVars         = "taskfile-vars"
+	varSourceIncludeVars          = "include-vars"
+	varSourceIncludedTaskfileVars = "included-taskfile-vars"
+	varSourceCall                 = "call"
+	varSourceTaskVars             = "task-vars"
+)
+
+// varSource records the layer that provided a variable's effective value.
+type varSource struct {
+	Source  string
+	Dynamic bool
+}
+
 type Compiler struct {
 	Dir            string
 	Entrypoint     string
@@ -31,6 +51,24 @@ type Compiler struct {
 
 	dynamicCache   map[string]string
 	muDynamicCache sync.Mutex
+
+	// varSources, when non-nil, records the winning source layer for every
+	// variable produced by getVariables. It is only set while an execution
+	// receipt is being generated; normal execution leaves it nil.
+	varSources map[string]varSource
+}
+
+// trackVarSource records the source layer of a variable. Later layers
+// overwrite earlier ones, matching variable precedence. It is a no-op
+// unless receipt generation installed a tracker.
+func (c *Compiler) trackVarSource(name, source string, v ast.Var) {
+	if c.varSources == nil {
+		return
+	}
+	c.varSources[name] = varSource{
+		Source:  source,
+		Dynamic: v.Sh != nil && *v.Sh != "",
+	}
 }
 
 func (c *Compiler) GetTaskfileVariables() (*ast.Vars, error) {
@@ -47,16 +85,21 @@ func (c *Compiler) FastGetVariables(t *ast.Task, call *Call) (*ast.Vars, error) 
 
 func (c *Compiler) getVariables(t *ast.Task, call *Call, evaluateShVars bool) (*ast.Vars, error) {
 	result := env.GetEnviron()
+	for k := range result.All() {
+		c.trackVarSource(k, varSourceEnvironment, ast.Var{})
+	}
 	specialVars, err := c.getSpecialVars(t, call)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range specialVars {
 		result.Set(k, ast.Var{Value: v, Secret: false})
+		c.trackVarSource(k, varSourceSpecial, ast.Var{})
 	}
 
-	getRangeFunc := func(dir string) func(k string, v ast.Var) error {
+	getRangeFunc := func(dir string, source string) func(k string, v ast.Var) error {
 		return func(k string, v ast.Var) error {
+			c.trackVarSource(k, source, v)
 			cache := &templater.Cache{Vars: result}
 			// Replace values
 			newVar := templater.ReplaceVar(v, cache)
@@ -90,9 +133,14 @@ func (c *Compiler) getVariables(t *ast.Task, call *Call, evaluateShVars bool) (*
 			return nil
 		}
 	}
-	rangeFunc := getRangeFunc(c.Dir)
 
-	var taskRangeFunc func(k string, v ast.Var) error
+	taskfileEnvRange := getRangeFunc(c.Dir, varSourceTaskfileEnv)
+	taskfileVarsRange := getRangeFunc(c.Dir, varSourceTaskfileVars)
+	includeVarsRange := getRangeFunc(c.Dir, varSourceIncludeVars)
+	callVarsRange := getRangeFunc(c.Dir, varSourceCall)
+
+	var includedTaskfileVarsRange func(k string, v ast.Var) error
+	var taskVarsRange func(k string, v ast.Var) error
 	if t != nil {
 		// NOTE(@andreynering): We're manually joining these paths here because
 		// this is the raw task, not the compiled one.
@@ -102,27 +150,28 @@ func (c *Compiler) getVariables(t *ast.Task, call *Call, evaluateShVars bool) (*
 			return nil, err
 		}
 		dir = filepathext.SmartJoin(c.Dir, dir)
-		taskRangeFunc = getRangeFunc(dir)
+		includedTaskfileVarsRange = getRangeFunc(dir, varSourceIncludedTaskfileVars)
+		taskVarsRange = getRangeFunc(dir, varSourceTaskVars)
 	}
 
 	for k, v := range c.TaskfileEnv.All() {
-		if err := rangeFunc(k, v); err != nil {
+		if err := taskfileEnvRange(k, v); err != nil {
 			return nil, err
 		}
 	}
 	for k, v := range c.TaskfileVars.All() {
-		if err := rangeFunc(k, v); err != nil {
+		if err := taskfileVarsRange(k, v); err != nil {
 			return nil, err
 		}
 	}
 	if t != nil {
 		for k, v := range t.IncludeVars.All() {
-			if err := rangeFunc(k, v); err != nil {
+			if err := includeVarsRange(k, v); err != nil {
 				return nil, err
 			}
 		}
 		for k, v := range t.IncludedTaskfileVars.All() {
-			if err := taskRangeFunc(k, v); err != nil {
+			if err := includedTaskfileVarsRange(k, v); err != nil {
 				return nil, err
 			}
 		}
@@ -133,12 +182,12 @@ func (c *Compiler) getVariables(t *ast.Task, call *Call, evaluateShVars bool) (*
 	}
 
 	for k, v := range call.Vars.All() {
-		if err := rangeFunc(k, v); err != nil {
+		if err := callVarsRange(k, v); err != nil {
 			return nil, err
 		}
 	}
 	for k, v := range t.Vars.All() {
-		if err := taskRangeFunc(k, v); err != nil {
+		if err := taskVarsRange(k, v); err != nil {
 			return nil, err
 		}
 	}

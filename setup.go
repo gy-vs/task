@@ -100,6 +100,9 @@ func (e *Executor) readTaskfile(node taskfile.Node) error {
 		}
 		return err
 	}
+	// Retain the resolved include graph for execution-receipt generation.
+	// Normal execution only uses the merged Taskfile.
+	e.taskfileGraph = graph
 	if e.Taskfile, err = graph.Merge(); err != nil {
 		return err
 	}

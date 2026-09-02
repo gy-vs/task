@@ -88,6 +88,8 @@ var (
 	CertKey             string
 	Interactive         bool
 	TempDir             string
+	Receipt             string
+	CompareReceipts     []string
 )
 
 func init() {
@@ -141,6 +143,8 @@ func init() {
 	pflag.BoolVarP(&Parallel, "parallel", "p", false, "Executes tasks provided on command line in parallel.")
 	pflag.BoolVarP(&Dry, "dry", "n", getConfig(config, "DRY", func() *bool { return nil }, false), "Compiles and prints tasks in the order that they would be run, without executing them.")
 	pflag.BoolVar(&Summary, "summary", false, "Show summary about a task.")
+	pflag.StringVar(&Receipt, "receipt", "", "Writes a machine-readable execution receipt (JSON) of the resolved task plan to the given file instead of running tasks. Use \"-\" for stdout.")
+	pflag.StringSliceVar(&CompareReceipts, "compare-receipts", nil, "Offline: compares two execution receipt files (--compare-receipts a.json --compare-receipts b.json) and reports plan differences. Tasks are not run and remote includes are not fetched.")
 	pflag.BoolVarP(&ExitCode, "exit-code", "x", false, "Pass-through the exit code of the task command.")
 	pflag.StringVarP(&Dir, "dir", "d", "", "Sets the directory in which Task will execute and look for a Taskfile.")
 	pflag.StringVarP(&Entrypoint, "taskfile", "t", "", `Choose which Taskfile to run. Defaults to "Taskfile.yml".`)
@@ -244,6 +248,14 @@ func Validate() error {
 	// Validate certificate flags
 	if (Cert != "" && CertKey == "") || (Cert == "" && CertKey != "") {
 		return errors.New("task: --cert and --cert-key must be provided together")
+	}
+
+	if len(CompareReceipts) != 0 && len(CompareReceipts) != 2 {
+		return errors.New("task: --compare-receipts requires exactly two receipt files")
+	}
+
+	if Receipt != "" && len(CompareReceipts) != 0 {
+		return errors.New("task: you can't set both --receipt and --compare-receipts")
 	}
 
 	return nil

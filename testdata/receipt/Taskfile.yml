@@ -1,0 +1,46 @@
+version: '3'
+
+includes:
+  lib:
+    taskfile: ./included/Taskfile.yml
+
+vars:
+  GREETING: hello
+  SECRET_TOKEN:
+    sh: echo "fakesecret12345"
+    secret: true
+
+tasks:
+  default:
+    deps:
+      - build
+    cmds:
+      - echo "root default"
+
+  build:
+    aliases:
+      - b
+    deps:
+      - lib:setup
+      - task: gen
+        vars: {MODE: fast}
+    cmds:
+      - echo "{{.GREETING}} from build"
+      - echo "token is {{.SECRET_TOKEN}}"
+      - task: package
+
+  gen:
+    sources:
+      - src/*.txt
+    cmds:
+      - echo "generating"
+
+  package:
+    cmds:
+      - task: lib:setup
+      - echo "packaging"
+
+  platonly:
+    platforms: [plan9]
+    cmds:
+      - echo "does not run on this platform"

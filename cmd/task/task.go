@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/go-task/task/v3/internal/flags"
 	"github.com/go-task/task/v3/internal/logger"
 	"github.com/go-task/task/v3/internal/version"
+	"github.com/go-task/task/v3/receipt"
 	"github.com/go-task/task/v3/taskfile/ast"
 )
 
@@ -126,6 +129,13 @@ func run() error {
 		return nil
 	}
 
+	// Offline receipt comparison: read the two receipt files only. No
+	// Taskfile is read, no task is executed and no remote include is
+	// fetched.
+	if len(flags.CompareReceipts) == 2 {
+		return compareReceipts(flags.CompareReceipts[0], flags.CompareReceipts[1])
+	}
+
 	e := task.NewExecutor(
 		flags.WithFlags(),
 		task.WithVersionCheck(true),
@@ -174,6 +184,8 @@ func run() error {
 
 	// Merge CLI variables first (e.g. FOO=bar) so they take priority over Taskfile defaults
 	e.Taskfile.Vars.Merge(globals, nil)
+	// Keep the CLI variables around for execution-receipt provenance.
+	e.Options(task.WithGlobalVars(globals))
 
 	// Then ReverseMerge special variables so they're available for templating
 	cliArgsPostDashQuoted, err := args.ToQuotedString(cliArgsPostDash)
@@ -195,9 +207,69 @@ func run() error {
 
 	ctx := context.Background()
 
+	// Receipt generation: resolve the plan with the same inputs as a run,
+	// write the receipt, and do not execute anything.
+	if flags.Receipt != "" {
+		return writeReceipt(ctx, e, flags.Receipt, calls)
+	}
+
 	if flags.Status {
 		return e.Status(ctx, calls...)
 	}
 
 	return e.Run(ctx, calls...)
+}
+
+// writeReceipt generates an execution receipt for the given calls and writes
+// it to path, or to stdout when path is "-".
+func writeReceipt(ctx context.Context, e *task.Executor, path string, calls []*task.Call) error {
+	r, err := e.GenerateReceipt(ctx, calls...)
+	if err != nil {
+		return err
+	}
+
+	var w io.Writer = os.Stdout
+	if path != "-" {
+		f, err := os.Create(path)
+		if err != nil {
+			return fmt.Errorf("task: cannot write execution receipt to %q: %w", path, err)
+		}
+		defer f.Close()
+		w = f
+	}
+	if err := receipt.Write(w, r); err != nil {
+		return err
+	}
+	if path != "-" && !flags.Silent {
+		l := &logger.Logger{
+			Stdout: os.Stdout,
+			Stderr: os.Stderr,
+			Color:  flags.Color,
+		}
+		l.Outf(logger.Green, "task: execution receipt written to %s\n", path)
+	}
+	return nil
+}
+
+// compareReceipts loads two receipts and reports whether their plans
+// differ. It exits with code 1 when the plans differ so it can be used as a
+// CI gate.
+func compareReceipts(pathA, pathB string) error {
+	a, err := receipt.Load(pathA)
+	if err != nil {
+		return err
+	}
+	b, err := receipt.Load(pathB)
+	if err != nil {
+		return err
+	}
+	diff, err := receipt.Compare(a, b)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, strings.TrimSpace(diff.String()))
+	if !diff.Equal {
+		os.Exit(1)
+	}
+	return nil
 }

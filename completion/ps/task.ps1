@@ -55,6 +55,8 @@ Register-ArgumentCompleter -CommandName $cmdNames -ScriptBlock {
 			[CompletionResult]::new('--sort', '--sort', [CompletionResultType]::ParameterName, 'task sorting order'),
 			[CompletionResult]::new('--status', '--status', [CompletionResultType]::ParameterName, 'check task status'),
 			[CompletionResult]::new('--summary', '--summary', [CompletionResultType]::ParameterName, 'show task summary'),
+			[CompletionResult]::new('--receipt', '--receipt', [CompletionResultType]::ParameterName, 'write execution receipt (JSON) to file'),
+			[CompletionResult]::new('--compare-receipts', '--compare-receipts', [CompletionResultType]::ParameterName, 'offline: compare two receipt files'),
 			[CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'choose Taskfile'),
 			[CompletionResult]::new('--taskfile', '--taskfile', [CompletionResultType]::ParameterName, 'choose Taskfile'),
 			[CompletionResult]::new('-v', '-v', [CompletionResultType]::ParameterName, 'verbose output'),

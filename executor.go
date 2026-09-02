@@ -72,6 +72,15 @@ type (
 		UserWorkingDir     string
 		EnableVersionCheck bool
 
+		// taskfileGraph is the Taskfile include graph produced by Setup,
+		// retained for execution-receipt generation. It is not used during
+		// normal task execution.
+		taskfileGraph *ast.TaskfileGraph
+		// globalVars holds the variables passed on the command line
+		// (e.g. "task build FOO=bar") so receipt generation can attribute
+		// them to the "cli" source layer.
+		globalVars *ast.Vars
+
 		fuzzyModel     *fuzzy.Model
 		fuzzyModelOnce sync.Once
 
@@ -638,6 +647,21 @@ func (o *versionCheckOption) ApplyToExecutor(e *Executor) {
 // returns an error.
 func WithFailfast(failfast bool) ExecutorOption {
 	return &failfastOption{failfast}
+}
+
+// WithGlobalVars provides the variables passed on the command line
+// (e.g. "task build FOO=bar"). They are only used to attribute variable
+// sources when generating an execution receipt.
+func WithGlobalVars(vars *ast.Vars) ExecutorOption {
+	return &globalVarsOption{vars}
+}
+
+type globalVarsOption struct {
+	vars *ast.Vars
+}
+
+func (o *globalVarsOption) ApplyToExecutor(e *Executor) {
+	e.globalVars = o.vars
 }
 
 type failfastOption struct {
